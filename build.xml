@@ -1,0 +1,313 @@
+<project name="strutstestcaseng" default="all" basedir="." xmlns:ivy="antlib:org.apache.ivy.ant">
+
+  <!-- ================ Initialize Property Values ================ -->
+
+  <!-- set jikes as the java compiler -->
+  <property name="build.compiler" value="modern"/>
+
+  <!-- set the release version -->
+  <property name="major.version" value="2"/>
+  <property name="minor.version" value="2"/>
+  <property name="point.version" value="0"/>
+  <property name="release.version" value="${major.version}${minor.version}${point.version}"/>
+  <property name="jar.name" value="strutstest-${major.version}.${minor.version}.${point.version}.jar"/>
+
+  <!-- targets this build for different Servlet specs -->
+  <!-- uncomment or set on the ant command line       -->
+  <!-- <property name="build_2.2" value="true"  />-->
+  <!-- <property name="build_2.4" value="true"  />-->
+
+  <!-- points to the top of a test application server -->
+  <!-- used for automatic deployment of the test code -->
+  <property name="appserver.home" value="/Users/deryl/develop/resin-3.0.8"/>
+
+  <!-- compile options defaults -->
+  <property name="comp.deprecate" value="off"/>
+  <property name="comp.debug" value="on"/>
+  <property name="comp.optimize" value="off"/>
+  <property name="comp.depend" value="on"/>
+  <property name="comp.verbose" value="off"/>
+  <property name="comp.source" value="1.6"/>
+  <property name="comp.target" value="1.6"/>
+
+  <!-- important directories -->
+  <property name="build.dir" value="${basedir}/build"/>
+  <property name="src.dir" value="${basedir}/src"/>
+  <property name="distribute.dir" value="${basedir}/dist/strutstest"/>
+  <property name="doc.dir" value="${distribute.dir}/docs"/>
+  <property name="test.dir" value="${basedir}/test-results"/>
+  <property name="temp.dir" value="${basedir}/temp"/>
+  <property name="lib.dir" value="${basedir}/lib"/>
+
+  <!-- set class.path to use with javac/jikes -->
+
+  <!-- ====================== Build Targets ====================== -->
+
+  <target name="resolve-deps">
+    <ivy:retrieve/>
+    <ivy:makepom ivyfile="ivy.xml" pomfile="${build.dir}/pom.xml"/>
+    <ivy:resolve />
+  </target>
+
+  <!-- intialize build -->
+  <target name="init" depends="resolve-deps">
+    <condition property="servlet.version" value="2.2">
+      <isset property="build_2.2"/>
+    </condition>
+    <condition property="servlet.version" value="2.4">
+      <isset property="build_2.4"/>
+    </condition>
+    <condition property="servlet.version" value="2.3">
+      <and>
+        <not>
+          <isset property="build_2.2"/>
+        </not>
+        <not>
+          <isset property="build_2.4"/>
+        </not>
+      </and>
+    </condition>
+    <condition property="build_2.3" value="true">
+      <and>
+        <not>
+          <isset property="build_2.2"/>
+        </not>
+        <not>
+          <isset property="build_2.4"/>
+        </not>
+      </and>
+    </condition>
+    <echo message="servlet version = ${servlet.version}"/>
+    <property name="struts.version" value="1.2"/>
+    <path id="class.path">
+      <fileset dir="${lib.dir}">
+        <include name="*.jar"/>
+        <include name="*.zip"/>
+        <exclude name="servletapi-2.3.jar" if="build_2.2"/>
+        <exclude name="servletapi-2.4.jar" if="build_2.2"/>
+        <exclude name="servletapi-2.2.jar" if="build_2.3"/>
+        <exclude name="servletapi-2.4.jar" if="build_2.3"/>
+        <exclude name="servletapi-2.2.jar" if="build_2.4"/>
+        <exclude name="servletapi-2.3.jar" if="build_2.4"/>
+
+        <exclude name="cactus-13-1.7.jar" if="build_2.2"/>
+        <exclude name="cactus-12-1.7.jar" unless="build_2.2"/>
+      </fileset>
+      <pathelement location="${build.dir}"/>
+    </path>
+  </target>
+
+  <!-- Compile the application classes -->
+  <target name="build" depends="init" description="compile all Java classes">
+    <mkdir dir="${build.dir}"/>
+
+    <javac srcdir="${src.dir}"
+           destdir="${build.dir}"
+           deprecation="${comp.deprecate}"
+           debug="${comp.debug}"
+           optimize="${comp.optimize}"
+           verbose="${comp.verbose}"
+           depend="${comp.depend}"
+           source="${comp.source}"
+           target="${comp.target}">
+      <classpath refid="class.path"/>
+      <include name="**/*.java"/>
+      <excludesfile name="excludes-${struts.version}-${servlet.version}"/>
+    </javac>
+  </target>
+
+  <!-- package the application for deployment.  -->
+  <target name="package" description="package all Java classes" depends="build">
+    <mkdir dir="${distribute.dir}"/>
+    <jar jarfile="${distribute.dir}/${jar.name}">
+      <fileset dir="${build.dir}" includes="**/*.class" excludes="**/examples/**,**/tests/**"/>
+    </jar>
+
+    <war warfile="test.war" webxml="${src.dir}/examples/WEB-INF/web.xml">
+      <webinf dir="${src.dir}/examples/WEB-INF">
+        <exclude name="web.xml"/>
+      </webinf>
+      <!-- <webinf dir="${src.dir}/examples/cactus">
+        <include name="cactus.properties"/>
+      </webinf> -->
+      <lib dir="${lib.dir}">
+        <!-- <exclude name="cactus-13-1.7.jar" if="build_2.2"/>
+        <exclude name="cactus-12-1.7.jar" unless="build_2.2"/> -->
+        <exclude name="servletapi*.jar"/>
+        <exclude name="ant*.jar"/>
+      </lib>
+      <lib dir="${distribute.dir}" includes="${jar.name}"/>
+      <classes dir="${build.dir}" includes="**/tests/**,**/examples/**"/>
+      <classes dir="${src.dir}">
+        <include name="examples/ApplicationResources.properties"/>
+        <include name="log4j.properties"/>
+      </classes>
+      <!-- <classes dir="${src.dir}/examples/cactus">
+        <include name="cactus.properties"/>
+      </classes> -->
+      <fileset dir="${src.dir}/examples">
+        <include name="login/**"/>
+        <include name="main/**"/>
+      </fileset>
+    </war>
+  </target>
+
+  <!-- prepare code for public release -->
+  <target name="release" depends="init,package,docs">
+    <echo message="creating release for servlet v${servlet.version} and struts v${struts.version}.."/>
+    <zip zipFile="${basedir}/strutstest${release.version}-${struts.version}_${servlet.version}.zip"
+         basedir="${basedir}/dist"/>
+  </target>
+
+  <target name="release.src" depends="clean">
+    <zip zipFile="${basedir}/strutstest-${release.version}-src.zip" basedir="${basedir}">
+      <exclude name="*.zip"/>
+      <exclude name="lib/*.jar"/>
+    </zip>
+  </target>
+
+  <!-- Clean up the build -->
+  <target name="clean" description="remove all build products">
+    <delete dir="${build.dir}"/>
+    <delete dir="${basedir}/dist"/>
+    <delete dir="${test.dir}"/>
+    <delete file="${basedir}/test.war"/>
+    <delete>
+      <fileset dir="${basedir}" includes="strutstest*.zip"/>
+    </delete>
+  </target>
+
+  <!-- Generate Javadocs for the application -->
+  <target name="docs" description="compile documentation for all Java classes">
+    <mkdir dir="${doc.dir}/api"/>
+    <copy file="${basedir}/howto.htm" toDir="${doc.dir}"/>
+    <copy file="${basedir}/faq.htm" toDir="${doc.dir}"/>
+    <copy file="${basedir}/stylesheet.css" toDir="${doc.dir}"/>
+    <copy file="${basedir}/LICENSE.TXT" toDir="${distribute.dir}"/>
+    <copy file="${basedir}/README.TXT" toDir="${distribute.dir}"/>
+    <mkdir dir="${distribute.dir}/examples"/>
+    <copy todir="${distribute.dir}/examples">
+      <fileset dir="${src.dir}/examples" excludes="**/tiles*.xml"/>
+    </copy>
+    <javadoc packagenames="servletunit,servletunit.struts"
+             sourcepath="${src.dir}"
+             destdir="${doc.dir}/api"
+             author="true"
+             version="true"
+             use="true"
+             windowtitle="StrutsTestCase Documentation"
+             doctitle="&lt;H1&gt;StrutsTestCase for JUnit&lt;/H1&gt;"
+             bottom="&lt;i&gt;Copyright &#169; Deryl Seale All Rights Reserved.&lt;/i&gt;">
+      <group title="StrutsTestCase for JUnit" packages="servletunit.struts"/>
+      <group title="ServletUnit Mock Object Framework" packages="servletunit"/>
+      <!-- Put in links to JDK classes -->
+      <link offline="true"
+            href="http://java.sun.com/products/j2se/1.3/docs/api/"
+            packagelistLoc="http://java.sun.com/products/jdk/1.3/docs/api"/>
+      <link offline="true"
+            href="http://java.sun.com/j2ee/sdk_1.3/techdocs/api/"
+            packagelistLoc="http://java.sun.com/j2ee/sdk_1.3/techdocs/api/"/>
+    </javadoc>
+    <copy todir="${distribute.dir}/examples" file="test.war"/>
+  </target>
+
+  <!-- Run unit tests -->
+  <target name="test" description="run all mock object tests">
+    <mkdir dir="${test.dir}"/>
+    <junit printsummary="yes" haltonfailure="no">
+      <sysproperty key="test.dir" value="${test.dir}"/>
+      <sysproperty key="basedir" value="${basedir}"/>
+      <classpath refid="class.path"/>
+      <classpath>
+        <pathelement location="${src.dir}/examples/"/>
+        <pathelement location="${src.dir}/"/>
+      </classpath>
+      <formatter type="xml"/>
+
+      <batchtest fork="yes" todir="${test.dir}">
+        <fileset dir="${build.dir}">
+          <include name="**/examples/**/Test*.class"/>
+          <include name="**/servletunit/struts/Test*.class"/>
+          <include name="**/tests/**/Test*.class"/>
+          <exclude name="**/cactus/**"/>
+        </fileset>
+      </batchtest>
+    </junit>
+
+    <junitreport todir="${test.dir}">
+      <fileset dir="${test.dir}">
+        <include name="TEST-*.xml"/>
+      </fileset>
+      <report format="frames" todir="${test.dir}"/>
+    </junitreport>
+
+  </target>
+
+  <target name="test.cactus" description="run all cactus tests">
+    <mkdir dir="${test.dir}"/>
+    <junit printsummary="yes" haltonfailure="no">
+      <sysproperty key="test.dir" value="${test.dir}"/>
+      <sysproperty key="basedir" value="${basedir}"/>
+      <classpath refid="class.path"/>
+      <classpath>
+        <pathelement location="${src.dir}/"/>
+        <pathelement location="${src.dir}/examples/cactus"/>
+      </classpath>
+      <formatter type="xml"/>
+      <batchtest fork="yes" todir="${test.dir}">
+        <fileset dir="${build.dir}">
+          <include name="**/cactus/**/Test*.class"/>
+        </fileset>
+      </batchtest>
+    </junit>
+    <junitreport todir="${test.dir}">
+      <fileset dir="${test.dir}">
+        <include name="TEST-*.xml"/>
+      </fileset>
+      <report format="frames" todir="${test.dir}"/>
+    </junitreport>
+  </target>
+
+  <target name="deploy" depends="package">
+    <copy todir="${appserver.home}/webapps" file="${basedir}/test.war" overwrite="true"/>
+  </target>
+  
+  <property name="publish.revision" value="2.2.0">
+  </property>
+
+  <target name="deploy-nexus-snapshot" depends="package">
+    <ivy:resolve file="${basedir}/ivy.xml" conf="default" />
+    <!-- <ivy:deliver
+      deliverpattern="${basedir}/ivy.xml"
+      pubrevision="${publish.revision}"
+      status="snapshot"
+      organisation="struts"
+      module="struts-test-ng"/> -->
+    <ivy:publish resolver="nexus-snapshots"
+                 revision="2.2.0-SNAPSHOT"
+                 overwrite="true"
+                 publishivy="false" >
+      <artifacts pattern="dist/strutstest/[artifact].[ext]"/>
+    </ivy:publish>
+  </target>
+
+  <target name="update.struts">
+    <tstamp/>
+    <delete dir="${temp.dir}"/>
+    <mkdir dir="${temp.dir}"/>
+    <get src="http://svn.apache.org/builds/jakarta-struts/nightly/struts-${DSTAMP}.zip"
+         dest="${temp.dir}/jakarta-struts-nightly.zip"
+         verbose="false"/>
+    <unzip src="${temp.dir}/jakarta-struts-nightly.zip" dest="${temp.dir}"/>
+    <copy file="${temp.dir}/struts-${DSTAMP}/lib/struts.jar" tofile="${lib.dir}/struts-1.2.jar" overwrite="true"/>
+    <delete dir="${temp.dir}"/>
+  </target>
+
+  <!-- Run all the build targets -->
+  <target name="all" description="build the StrutsTestCase library" depends="clean,build,package,deploy"/>
+
+  <target name="auto.build" depends="clean,update.struts,build,test,package,deploy,test.cactus"/>
+
+</project>
+
+

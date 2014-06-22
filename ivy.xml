@@ -1,0 +1,14 @@
+<ivy-module version="2.0">
+  <info organisation="struts" module="struts-tests-ng" revision="2.2.0"/>
+
+  <publications>
+    <artifact name="strutstestng" type="jar"/>
+  </publications>
+
+  <dependencies>
+    <dependency org="org.testng" name="testng" rev="6.8.8"/>
+    <dependency org="jetty" name="servlet-api" rev="2.5-6.0.2"/>
+    <dependency org="jetty" name="javax.servlet" rev="5.1.12"/>
+    <dependency org="struts" name="struts" rev="1.2.9"/>
+  </dependencies>
+</ivy-module>
